@@ -1,0 +1,138 @@
+---
+title: "Simulación pobreza y distribución del ingreso"
+format: 
+  html:
+    embed-resources: true
+---
+
+Pequeña simulación de cómo cambia la cantidad de personas bajo la línea de pobreza cuando:
+    - Cambia el ingreso promedio manteniéndose igual la distribución
+    - Cambia la distribución del mismo ingreso total
+
+```{r setup, echo=FALSE, include=FALSE}
+library(plotly)
+library(dplyr)
+library(purrr)
+library(scales)
+
+set.seed(123) 
+N <- 10000 
+linea_de_pobreza <- 15000
+
+# Bins de a 1000 y línea de pobreza 15.000 logran que la línea siempre corte entre barras.
+bins_config <- list(start = 0, end = 80000, size = 1000)
+```
+
+### Primer caso: Ajuste del ingreso promedio
+
+```{r} 
+#| label: prom_plot
+#| echo: false 
+#| message: false
+#| warning: false
+
+mean_vals <- seq(20000, 40000, by = 5000)
+fixed_sd <- 8000
+initial_mean_idx <- 3
+
+mean_steps_data <- tibble(mean = mean_vals) %>%
+  mutate(
+    label = as.character(mean),
+    income_sample = map(mean, ~rnorm(N, .x, fixed_sd)),
+    poverty_pct = map_dbl(income_sample, ~sum(.x < linea_de_pobreza) / N),
+    poverty_text = paste0(percent(poverty_pct, accuracy = 0.1), " de la población simulada bajo la línea de pobreza")
+  )
+
+initial_sample <- mean_steps_data$income_sample[[initial_mean_idx]]
+initial_poverty_sample <- initial_sample[initial_sample < linea_de_pobreza]
+initial_non_poverty_sample <- initial_sample[initial_sample >= linea_de_pobreza]
+
+p_mean <- plot_ly(alpha = 0.8) %>%
+  add_histogram(x = initial_poverty_sample, name = "Bajo línea de pobreza", xbins = bins_config, marker = list(color = '#ff9900')) %>%
+  add_histogram(x = initial_non_poverty_sample, name = "Sobre línea de pobreza", xbins = bins_config, marker = list(color = '#1f77b4'))
+
+mean_slider_steps <- purrr::map(1:nrow(mean_steps_data), function(i) {
+  poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] < linea_de_pobreza]
+  non_poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] >= linea_de_pobreza]
+  list(
+    method = 'update',
+    args = list(
+      list(x = list(poverty_sample, non_poverty_sample)),
+      list(annotations = list(list(text = mean_steps_data$poverty_text[[i]])))
+    ),
+    label = mean_steps_data$label[i]
+  )
+})
+
+p_mean <- p_mean %>% layout(
+  title = paste("Desvío estándar fijo en", fixed_sd),
+  xaxis = list(range = c(0, 80000), title = "Ingreso", zeroline = FALSE),
+  yaxis = list(title = "Cantidad de personas"),
+  barmode = 'stack',
+  annotations = list(
+    list(x = 0.95, y = 0.9, xref = 'paper', yref = 'paper', text = mean_steps_data$poverty_text[[initial_mean_idx]], 
+         showarrow = FALSE, xanchor = 'right', font = list(size=14))
+  ),
+  shapes = list(list(type = 'line', x0 = linea_de_pobreza, x1 = linea_de_pobreza, y0 = 0, y1 = 1, yref='paper', line = list(color = 'red', dash = 'dash'))),
+  sliders = list(list(active = initial_mean_idx - 1, currentvalue = list(prefix = "Ingreso promedio: "), steps = mean_slider_steps))
+)
+
+p_mean
+```
+
+### Segundo caso: Ajuste del desvío estándar
+
+```{r} 
+#| label: sd_plot
+#| echo: false 
+#| message: false
+#| warning: false
+
+sd_vals <- seq(4000, 12000, by = 2000) # 5 steps
+fixed_mean <- 30000
+initial_sd_idx <- 3 # Corresponds to sd = 8000
+
+sd_steps_data <- tibble(sd = sd_vals) %>%
+  mutate(
+    label = as.character(sd),
+    income_sample = map(sd, ~rnorm(N, fixed_mean, .x)),
+    poverty_pct = map_dbl(income_sample, ~sum(.x < linea_de_pobreza) / N),
+    poverty_text = paste0(percent(poverty_pct, accuracy = 0.1), " de la población simulada bajo la línea de pobreza")
+  )
+
+initial_sample_sd <- sd_steps_data$income_sample[[initial_sd_idx]]
+initial_poverty_sample_sd <- initial_sample_sd[initial_sample_sd < linea_de_pobreza]
+initial_non_poverty_sample_sd <- initial_sample_sd[initial_sample_sd >= linea_de_pobreza]
+
+p_sd <- plot_ly(alpha = 0.8) %>%
+  add_histogram(x = initial_poverty_sample_sd, name = "Debajo de la línea de pobreza", xbins = bins_config, marker = list(color = '#ff9900')) %>%
+  add_histogram(x = initial_non_poverty_sample_sd, name = "Por encima de la línea de pobreza", xbins = bins_config, marker = list(color = '#1f77b4'))
+
+sd_slider_steps <- purrr::map(1:nrow(sd_steps_data), function(i) {
+  poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] < linea_de_pobreza]
+  non_poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] >= linea_de_pobreza]
+  list(
+    method = 'update',
+    args = list(
+      list(x = list(poverty_sample, non_poverty_sample)),
+      list(annotations = list(list(text = sd_steps_data$poverty_text[[i]])))
+    ),
+    label = sd_steps_data$label[i]
+  )
+})
+
+p_sd <- p_sd %>% layout(
+  title = paste("Ingreso promedio fijo en", fixed_mean),
+  xaxis = list(range = c(0, 80000), title = "Ingreso", zeroline = FALSE),
+  yaxis = list(title = "Cantidad de personas"),
+  barmode = 'stack',
+  annotations = list(
+    list(x = 0.95, y = 0.9, xref = 'paper', yref = 'paper', text = sd_steps_data$poverty_text[[initial_sd_idx]], 
+         showarrow = FALSE, xanchor = 'right', font = list(size=14))
+  ),
+  shapes = list(list(type = 'line', x0 = linea_de_pobreza, x1 = linea_de_pobreza, y0 = 0, y1 = 1, yref='paper', line = list(color = 'red', dash = 'dash'))),
+  sliders = list(list(active = initial_sd_idx - 1, currentvalue = list(prefix = "Desvío estándar: "), steps = sd_slider_steps))
+)
+
+p_sd
+```
