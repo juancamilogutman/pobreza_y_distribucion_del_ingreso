@@ -6,19 +6,32 @@ format:
     theme: cosmo
     toc: true
     toc-depth: 2
+    css: |
+      .quarto-container {
+        max-width: 95% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+      body {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
 ---
 
 ## Introducción
 
 Simulación interactiva que muestra cómo cambia la pobreza bajo dos escenarios:
 
-1. **Crecimiento económico**: Aumenta el ingreso promedio manteniendo la dispersión constante
-2. **Redistribución**: Cambia la dispersión del ingreso manteniendo el ingreso promedio similar
+1. Aumento el ingreso promedio manteniendo la dispersión constante
+2. Cambia la dispersión del ingreso manteniendo el ingreso promedio similar
 
-La distribución utilizada es **Log-normal**, que refleja mejor la realidad de la desigualdad en Argentina: muchas personas con ingresos bajos y pocas con ingresos muy altos (asimetría positiva). Esta distribución tiene dos parámetros independientes:
+**Líneas de referencia en los gráficos:**
 
-- **meanlog**: Controla la ubicación (mueve toda la distribución)
-- **sdlog**: Controla la dispersión/desigualdad (spread de la distribución)
+- <span style="color: red;">**━━━ Línea de pobreza**</span> (roja, discontinua): $15.000
+- <span style="color: #ff7f0e;">**⋯⋯ Mediana**</span> (naranja, punteada)
+- <span style="color: #1f77b4;">**━━━ Media**</span> (azul, sólida)
+
+La diferencia entre media y mediana muestra la **asimetría de la distribución**: en distribuciones desiguales, la media es mayor que la mediana porque los ingresos altos tiran el promedio hacia arriba.
 
 ```{r setup, echo=FALSE, include=FALSE}
 library(plotly)
@@ -27,7 +40,7 @@ library(purrr)
 library(scales)
 
 set.seed(123)
-N <- 10000
+N <- 100000  # Increased for smoother distribution
 linea_de_pobreza <- 15000
 
 # Bins de a 1000 y línea de pobreza 15.000 logran que la línea siempre corte entre barras.
@@ -42,7 +55,7 @@ calc_gini <- function(x) {
 }
 ```
 
-## Caso 1: Crecimiento económico (aumenta ingreso promedio)
+## Caso 1:
 
 **Dispersión constante**, se mueve toda la distribución hacia arriba (aumenta el ingreso promedio).
 
@@ -65,19 +78,26 @@ mean_steps_data <- tibble(meanlog = meanlog_vals) %>%
     poverty_pct = poverty_count / N,
     gini = map_dbl(income_sample, calc_gini),
     actual_mean = map_dbl(income_sample, mean),
-    median_income = map_dbl(income_sample, median),
-    poverty_text = paste0(
-      "<b>", percent(poverty_pct, accuracy = 0.1), "</b> en pobreza | ",
-      "<b>Gini: ", round(gini, 3), "</b><br>",
-      "Promedio: $", format(round(actual_mean), big.mark = "."),
-      " | Mediana: $", format(round(median_income), big.mark = ".")
-    )
+    median_income = map_dbl(income_sample, median)
   )
 
+# Initial values
 initial_sample <- mean_steps_data$income_sample[[initial_mean_idx]]
 initial_poverty_sample <- initial_sample[initial_sample < linea_de_pobreza]
 initial_non_poverty_sample <- initial_sample[initial_sample >= linea_de_pobreza]
 
+# Create metrics text for annotation
+create_metrics_text <- function(idx) {
+  paste0(
+    "<b style='font-size:15px'>Indicadores</b><br>",
+    "─────────────────<br>",
+    "<b>Coef. Gini:</b> ", round(mean_steps_data$gini[[idx]], 3), "<br>",
+    "<b>Ingreso promedio:</b> $", format(round(mean_steps_data$actual_mean[[idx]]), big.mark = "."), "<br>",
+    "<b>% en pobreza:</b> ", percent(mean_steps_data$poverty_pct[[idx]], accuracy = 0.1)
+  )
+}
+
+# Create histogram with metrics box
 p_mean <- plot_ly(alpha = 0.8) %>%
   add_histogram(
     x = initial_poverty_sample,
@@ -90,53 +110,123 @@ p_mean <- plot_ly(alpha = 0.8) %>%
     name = "Sobre línea de pobreza",
     xbins = bins_config,
     marker = list(color = '#2ca02c')
+  ) %>%
+  layout(
+    title = "",
+    barmode = 'stack',
+    xaxis = list(range = c(0, 80000), title = "Ingreso mensual ($)", zeroline = FALSE),
+    yaxis = list(title = "Cantidad de personas"),
+    shapes = list(
+      list(
+        type = 'line',
+        x0 = linea_de_pobreza, x1 = linea_de_pobreza,
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = 'red', width = 3, dash = 'dash'),
+        name = 'Línea de pobreza'
+      ),
+      list(
+        type = 'line',
+        x0 = median(initial_sample), x1 = median(initial_sample),
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = '#ff7f0e', width = 2, dash = 'dot'),
+        name = 'Mediana'
+      ),
+      list(
+        type = 'line',
+        x0 = mean(initial_sample), x1 = mean(initial_sample),
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = '#1f77b4', width = 2),
+        name = 'Media'
+      )
+    ),
+    annotations = list(
+      list(
+        x = 0.98, y = 0.98,
+        xref = 'paper', yref = 'paper',
+        text = create_metrics_text(initial_mean_idx),
+        showarrow = FALSE,
+        xanchor = 'right',
+        yanchor = 'top',
+        font = list(size = 13),
+        bgcolor = 'rgba(255, 255, 255, 0.95)',
+        bordercolor = '#2c3e50',
+        borderwidth = 2,
+        borderpad = 10,
+        align = 'left'
+      )
+    )
   )
 
+# Create slider steps that update histogram, metrics, and mean/median lines
 mean_slider_steps <- purrr::map(1:nrow(mean_steps_data), function(i) {
   poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] < linea_de_pobreza]
   non_poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] >= linea_de_pobreza]
+
+  sample_mean <- mean_steps_data$actual_mean[[i]]
+  sample_median <- mean_steps_data$median_income[[i]]
+
   list(
     method = 'update',
     args = list(
-      list(x = list(poverty_sample, non_poverty_sample)),
-      list(annotations = list(list(text = mean_steps_data$poverty_text[[i]])))
+      list(
+        x = list(poverty_sample, non_poverty_sample)
+      ),
+      list(
+        annotations = list(
+          list(
+            x = 0.98, y = 0.98,
+            xref = 'paper', yref = 'paper',
+            text = create_metrics_text(i),
+            showarrow = FALSE,
+            xanchor = 'right',
+            yanchor = 'top',
+            font = list(size = 13),
+            bgcolor = 'rgba(255, 255, 255, 0.95)',
+            bordercolor = '#2c3e50',
+            borderwidth = 2,
+            borderpad = 10,
+            align = 'left'
+          )
+        ),
+        shapes = list(
+          list(
+            type = 'line',
+            x0 = linea_de_pobreza, x1 = linea_de_pobreza,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = 'red', width = 3, dash = 'dash')
+          ),
+          list(
+            type = 'line',
+            x0 = sample_median, x1 = sample_median,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = '#ff7f0e', width = 2, dash = 'dot')
+          ),
+          list(
+            type = 'line',
+            x0 = sample_mean, x1 = sample_mean,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = '#1f77b4', width = 2)
+          )
+        )
+      )
     ),
     label = mean_steps_data$label[i]
   )
 })
 
 p_mean <- p_mean %>% layout(
-  title = "Efecto del crecimiento económico sobre la pobreza<br><sub>Distribución Log-normal - Dispersión constante (sdlog=0.6)</sub>",
-  xaxis = list(range = c(0, 80000), title = "Ingreso mensual ($)", zeroline = FALSE),
-  yaxis = list(title = "Cantidad de personas"),
-  barmode = 'stack',
-  annotations = list(
-    list(
-      x = 0.98, y = 0.95,
-      xref = 'paper', yref = 'paper',
-      text = mean_steps_data$poverty_text[[initial_mean_idx]],
-      showarrow = FALSE,
-      xanchor = 'right',
-      font = list(size = 13),
-      bgcolor = 'rgba(255,255,255,0.8)',
-      borderpad = 8
-    )
-  ),
-  shapes = list(
-    list(
-      type = 'line',
-      x0 = linea_de_pobreza, x1 = linea_de_pobreza,
-      y0 = 0, y1 = 1,
-      yref = 'paper',
-      line = list(color = 'red', width = 2, dash = 'dash')
-    )
-  ),
   sliders = list(
     list(
       active = initial_mean_idx - 1,
       currentvalue = list(prefix = "Ingreso promedio: "),
       steps = mean_slider_steps,
-      pad = list(t = 40)
+      pad = list(t = 60)
     )
   )
 )
@@ -167,19 +257,26 @@ sd_steps_data <- tibble(sdlog = sdlog_vals) %>%
     poverty_pct = poverty_count / N,
     gini = map_dbl(income_sample, calc_gini),
     actual_mean = map_dbl(income_sample, mean),
-    median_income = map_dbl(income_sample, median),
-    poverty_text = paste0(
-      "<b>", percent(poverty_pct, accuracy = 0.1), "</b> en pobreza | ",
-      "<b>Gini: ", round(gini, 3), "</b><br>",
-      "Promedio: $", format(round(actual_mean), big.mark = "."),
-      " | Mediana: $", format(round(median_income), big.mark = ".")
-    )
+    median_income = map_dbl(income_sample, median)
   )
 
+# Initial values
 initial_sample_sd <- sd_steps_data$income_sample[[initial_sd_idx]]
 initial_poverty_sample_sd <- initial_sample_sd[initial_sample_sd < linea_de_pobreza]
 initial_non_poverty_sample_sd <- initial_sample_sd[initial_sample_sd >= linea_de_pobreza]
 
+# Create metrics text for annotation
+create_metrics_text_sd <- function(idx) {
+  paste0(
+    "<b style='font-size:15px'>Indicadores</b><br>",
+    "─────────────────<br>",
+    "<b>Coef. Gini:</b> ", round(sd_steps_data$gini[[idx]], 3), "<br>",
+    "<b>Ingreso promedio:</b> $", format(round(sd_steps_data$actual_mean[[idx]]), big.mark = "."), "<br>",
+    "<b>% en pobreza:</b> ", percent(sd_steps_data$poverty_pct[[idx]], accuracy = 0.1)
+  )
+}
+
+# Create histogram with metrics box
 p_sd <- plot_ly(alpha = 0.8) %>%
   add_histogram(
     x = initial_poverty_sample_sd,
@@ -192,53 +289,123 @@ p_sd <- plot_ly(alpha = 0.8) %>%
     name = "Sobre línea de pobreza",
     xbins = bins_config,
     marker = list(color = '#2ca02c')
+  ) %>%
+  layout(
+    title = "",
+    barmode = 'stack',
+    xaxis = list(range = c(0, 80000), title = "Ingreso mensual ($)", zeroline = FALSE),
+    yaxis = list(title = "Cantidad de personas"),
+    shapes = list(
+      list(
+        type = 'line',
+        x0 = linea_de_pobreza, x1 = linea_de_pobreza,
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = 'red', width = 3, dash = 'dash'),
+        name = 'Línea de pobreza'
+      ),
+      list(
+        type = 'line',
+        x0 = median(initial_sample_sd), x1 = median(initial_sample_sd),
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = '#ff7f0e', width = 2, dash = 'dot'),
+        name = 'Mediana'
+      ),
+      list(
+        type = 'line',
+        x0 = mean(initial_sample_sd), x1 = mean(initial_sample_sd),
+        y0 = 0, y1 = 1,
+        yref = 'paper',
+        line = list(color = '#1f77b4', width = 2),
+        name = 'Media'
+      )
+    ),
+    annotations = list(
+      list(
+        x = 0.98, y = 0.98,
+        xref = 'paper', yref = 'paper',
+        text = create_metrics_text_sd(initial_sd_idx),
+        showarrow = FALSE,
+        xanchor = 'right',
+        yanchor = 'top',
+        font = list(size = 13),
+        bgcolor = 'rgba(255, 255, 255, 0.95)',
+        bordercolor = '#2c3e50',
+        borderwidth = 2,
+        borderpad = 10,
+        align = 'left'
+      )
+    )
   )
 
+# Create slider steps that update histogram, metrics, and mean/median lines
 sd_slider_steps <- purrr::map(1:nrow(sd_steps_data), function(i) {
   poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] < linea_de_pobreza]
   non_poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] >= linea_de_pobreza]
+
+  sample_mean <- sd_steps_data$actual_mean[[i]]
+  sample_median <- sd_steps_data$median_income[[i]]
+
   list(
     method = 'update',
     args = list(
-      list(x = list(poverty_sample, non_poverty_sample)),
-      list(annotations = list(list(text = sd_steps_data$poverty_text[[i]])))
+      list(
+        x = list(poverty_sample, non_poverty_sample)
+      ),
+      list(
+        annotations = list(
+          list(
+            x = 0.98, y = 0.98,
+            xref = 'paper', yref = 'paper',
+            text = create_metrics_text_sd(i),
+            showarrow = FALSE,
+            xanchor = 'right',
+            yanchor = 'top',
+            font = list(size = 13),
+            bgcolor = 'rgba(255, 255, 255, 0.95)',
+            bordercolor = '#2c3e50',
+            borderwidth = 2,
+            borderpad = 10,
+            align = 'left'
+          )
+        ),
+        shapes = list(
+          list(
+            type = 'line',
+            x0 = linea_de_pobreza, x1 = linea_de_pobreza,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = 'red', width = 3, dash = 'dash')
+          ),
+          list(
+            type = 'line',
+            x0 = sample_median, x1 = sample_median,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = '#ff7f0e', width = 2, dash = 'dot')
+          ),
+          list(
+            type = 'line',
+            x0 = sample_mean, x1 = sample_mean,
+            y0 = 0, y1 = 1,
+            yref = 'paper',
+            line = list(color = '#1f77b4', width = 2)
+          )
+        )
+      )
     ),
     label = sd_steps_data$label[i]
   )
 })
 
 p_sd <- p_sd %>% layout(
-  title = "Efecto de la redistribución sobre la pobreza<br><sub>Distribución Log-normal - Promedio similar, varía dispersión (meanlog=10.05)</sub>",
-  xaxis = list(range = c(0, 80000), title = "Ingreso mensual ($)", zeroline = FALSE),
-  yaxis = list(title = "Cantidad de personas"),
-  barmode = 'stack',
-  annotations = list(
-    list(
-      x = 0.98, y = 0.95,
-      xref = 'paper', yref = 'paper',
-      text = sd_steps_data$poverty_text[[initial_sd_idx]],
-      showarrow = FALSE,
-      xanchor = 'right',
-      font = list(size = 13),
-      bgcolor = 'rgba(255,255,255,0.8)',
-      borderpad = 8
-    )
-  ),
-  shapes = list(
-    list(
-      type = 'line',
-      x0 = linea_de_pobreza, x1 = linea_de_pobreza,
-      y0 = 0, y1 = 1,
-      yref = 'paper',
-      line = list(color = 'red', width = 2, dash = 'dash')
-    )
-  ),
   sliders = list(
     list(
       active = initial_sd_idx - 1,
       currentvalue = list(prefix = "Dispersión (sdlog): "),
       steps = sd_slider_steps,
-      pad = list(t = 40)
+      pad = list(t = 60)
     )
   )
 )
@@ -248,23 +415,6 @@ p_sd
 
 ## Notas metodológicas
 
-- **Distribución Log-normal**: Distribución asimétrica con cola derecha pesada, ampliamente utilizada en economía para modelar ingresos. Es más realista que la distribución normal porque:
-  - No permite valores negativos (como los ingresos reales)
-  - Tiene asimetría positiva (la mayoría gana poco, pocos ganan mucho)
-  - Los efectos multiplicativos de la economía generan distribuciones log-normales naturalmente
-
-- **Parámetros de la log-normal**:
-  - **meanlog**: Controla la ubicación de la distribución (mueve toda la distribución). En el Caso 1 varía este parámetro.
-  - **sdlog**: Controla la dispersión/desigualdad. Mayor sdlog = mayor desigualdad. En el Caso 2 varía este parámetro.
-
-- **Relación entre parámetros y estadísticos**:
-  - Mediana = exp(meanlog)
-  - Media = exp(meanlog + sdlog²/2)
-
-- **Coeficiente de Gini**: Medida de desigualdad entre 0 (igualdad perfecta) y 1 (desigualdad máxima).
-  - Argentina tiene un Gini real de aproximadamente 0.40-0.43
-  - Para log-normal: Gini ≈ 2·Φ(sdlog/√2) - 1, donde Φ es la función de distribución normal estándar
-
 - **Línea de pobreza**: Fijada en $15.000 para esta simulación (referencia ilustrativa).
 
-- **Datos simulados**: N=10.000 personas. Los resultados son ilustrativos de los conceptos, no proyecciones reales.
+- **Datos simulados**: N=100.000 personas. Los resultados son ilustrativos de los conceptos, no proyecciones reales.
