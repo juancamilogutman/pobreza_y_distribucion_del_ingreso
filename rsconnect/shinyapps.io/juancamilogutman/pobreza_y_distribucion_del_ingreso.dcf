@@ -1,0 +1,13 @@
+name: pobreza_y_distribucion_del_ingreso
+title: pobreza_y_distribucion_del_ingreso
+username: juancamilogutman
+account: juancamilogutman
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15626828
+bundleId: 10979205
+url: https://juancamilogutman.shinyapps.io/pobreza_y_distribucion_del_ingreso/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: pobreza_y_distribucion_del_ingreso.qmd|simulacion_pobreza.html
