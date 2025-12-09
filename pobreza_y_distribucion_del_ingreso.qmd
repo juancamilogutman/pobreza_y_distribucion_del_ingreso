@@ -40,7 +40,7 @@ library(purrr)
 library(scales)
 
 set.seed(123)
-N <- 100000  # Increased for smoother distribution
+N <- 100000
 linea_de_pobreza <- 15000
 
 # Bins de a 1000 y línea de pobreza 15.000 logran que la línea siempre corte entre barras.
@@ -86,7 +86,6 @@ initial_sample <- mean_steps_data$income_sample[[initial_mean_idx]]
 initial_poverty_sample <- initial_sample[initial_sample < linea_de_pobreza]
 initial_non_poverty_sample <- initial_sample[initial_sample >= linea_de_pobreza]
 
-# Create metrics text for annotation
 create_metrics_text <- function(idx) {
   paste0(
     "<b style='font-size:15px'>Indicadores</b><br>",
@@ -97,7 +96,6 @@ create_metrics_text <- function(idx) {
   )
 }
 
-# Create histogram with metrics box
 p_mean <- plot_ly(alpha = 0.8) %>%
   add_histogram(
     x = initial_poverty_sample,
@@ -160,7 +158,7 @@ p_mean <- plot_ly(alpha = 0.8) %>%
     )
   )
 
-# Create slider steps that update histogram, metrics, and mean/median lines
+# slider
 mean_slider_steps <- purrr::map(1:nrow(mean_steps_data), function(i) {
   poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] < linea_de_pobreza]
   non_poverty_sample <- mean_steps_data$income_sample[[i]][mean_steps_data$income_sample[[i]] >= linea_de_pobreza]
@@ -260,12 +258,11 @@ sd_steps_data <- tibble(sdlog = sdlog_vals) %>%
     median_income = map_dbl(income_sample, median)
   )
 
-# Initial values
+# Valores iniciales
 initial_sample_sd <- sd_steps_data$income_sample[[initial_sd_idx]]
 initial_poverty_sample_sd <- initial_sample_sd[initial_sample_sd < linea_de_pobreza]
 initial_non_poverty_sample_sd <- initial_sample_sd[initial_sample_sd >= linea_de_pobreza]
 
-# Create metrics text for annotation
 create_metrics_text_sd <- function(idx) {
   paste0(
     "<b style='font-size:15px'>Indicadores</b><br>",
@@ -276,7 +273,6 @@ create_metrics_text_sd <- function(idx) {
   )
 }
 
-# Create histogram with metrics box
 p_sd <- plot_ly(alpha = 0.8) %>%
   add_histogram(
     x = initial_poverty_sample_sd,
@@ -339,7 +335,7 @@ p_sd <- plot_ly(alpha = 0.8) %>%
     )
   )
 
-# Create slider steps that update histogram, metrics, and mean/median lines
+#slider
 sd_slider_steps <- purrr::map(1:nrow(sd_steps_data), function(i) {
   poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] < linea_de_pobreza]
   non_poverty_sample <- sd_steps_data$income_sample[[i]][sd_steps_data$income_sample[[i]] >= linea_de_pobreza]
@@ -417,4 +413,4 @@ p_sd
 
 - **Línea de pobreza**: Fijada en $15.000 para esta simulación (referencia ilustrativa).
 
-- **Datos simulados**: N=100.000 personas. Los resultados son ilustrativos de los conceptos, no proyecciones reales.
+- **Datos simulados**: N=100.000 personas. Los resultados obviamente solo pretenden ilustrar algunos los conceptos.
